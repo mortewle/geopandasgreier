@@ -1,9 +1,12 @@
+"""
+Ymse funksjoner som kan brukes med geopandas.
+"""
 import geopandas as gpd
 import pandas as pd
 import numpy as np
 from shapely.wkt import loads
 
-  
+
 def read_geopandas(sti, **qwargs):
     try:
         from dapla import FileClient
@@ -19,26 +22,9 @@ def read_geopandas(sti, **qwargs):
             return gpd.read_file(sti, **qwargs)
 
 
-def samle_filer(filer, **qwargs):
+def samle_filer(filer: list, **qwargs) -> gpd.GeoDataFrame:
     return pd.concat((read_geopandas(fil, **qwargs) for fil in filer), axis=0, ignore_index=True)
     
-    
-# konverterer til geodataframe fra geoseries, shapely-objekt, wkt, liste med shapely-objekter eller shapely-sekvenser 
-# OBS: når man har shapely-objekter eller wkt, bør man sette crs. 
-def til_gdf(geom, set_crs=None, **qwargs) -> gpd.GeoDataFrame:
-
-    if isinstance(geom, str):
-        from shapely.wkt import loads
-        geom = loads(geom)
-        gdf = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(geom)}, **qwargs)
-    else:
-        gdf = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(geom)}, **qwargs)
-
-    if set_crs:
-        gdf = gdf.set_crs(set_crs)
-    
-    return gdf
-
 
 # fjerner tomme geometrier og NaN-geometrier
 def fjern_tomme_geometrier(gdf):
@@ -64,6 +50,118 @@ def gdf_concat(gdf_liste: list,
         pd.concat(gdf_liste, axis=axis, ignore_index=ignore_index, **qwargs), 
         geometry=geometry, crs=crs)
     
+
+#en overlay-variant som ikke finnes i geopandas
+def overlay_update(gdf1: gpd.GeoDataFrame,
+                   gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    out = gdf1.overlay(gdf2, how = "difference", keep_geom_type=True)
+    out = gdf_concat([out, gdf2])
+    out = out.loc[:, ~out.columns.str.contains('index|level_')]
+    return(out)
+
+
+# som gpd.sjoin bare at kolonner i right_gdf som også er i left_gdf fjernes (fordi det snart vil gi feilmelding i geopandas)
+# og kolonner som har med index å gjøre fjernes, fordi sjoin ofte returnerer index_right som kolonnenavn, som gir feilmelding ved neste join.
+def min_sjoin(left_gdf, right_gdf, dask=False, npartitions=8, **kwargs):
+
+    #fjern index-kolonner
+    left_gdf = left_gdf.loc[:, ~left_gdf.columns.str.contains('index|level_')]
+    right_gdf = right_gdf.loc[:, ~right_gdf.columns.str.contains('index|level_')]
+
+    #fjern kolonner fra gdf2 som er i gdf1
+    fjernede_kolonner = []
+    for kolonne in right_gdf.columns:
+        if kolonne in left_gdf.columns:
+            if kolonne != "geometry":
+                right_gdf = right_gdf.drop(kolonne, axis=1)
+                fjernede_kolonner.append(kolonne)
+    if len(fjernede_kolonner) > 0:
+        print(f"OBS: fjerner kolonnene {', '.join(fjernede_kolonner)} fra right_gdf fordi de finnes i left_gdf")
+
+    joinet = left_gdf.sjoin(right_gdf, **kwargs)
+        
+    return joinet.loc[:, ~joinet.columns.str.contains('index|level_')]
+
+
+# snapper (flytter) fra punkter til naermeste punkt/linje/polygon innen en gitt maks_distanse
+# går via nearest_points for å finne det nøyaktige punktet. Med kun snap() blir det ikke riktig.
+# funker med geodataframes, geoseries og shapely-objekter
+def snap_til(punkter, snap_til, maks_distanse=500):
+
+    from shapely.ops import nearest_points, snap
+
+    snap_til_shapely = snap_til.unary_union
+
+    if isinstance(punkter, gpd.GeoDataFrame):
+        for i, punkt in enumerate(punkter.geometry):
+            nearest = nearest_points(punkt, snap_til_shapely)[1] 
+            snappet_punkt = snap(punkt, nearest, tolerance=maks_distanse)
+            punkter.geometry.iloc[i] = snappet_punkt
+
+    if isinstance(punkter, gpd.GeoSeries):
+        for i, punkt in enumerate(punkter):
+            nearest = nearest_points(punkt, snap_til_shapely)[1]
+            snappet_punkt = snap(punkt, nearest, tolerance=maks_distanse)
+            punkter.iloc[i] = snappet_punkt
+        
+    return(punkter)
+
+
+# konverterer til geodataframe fra geoseries, shapely-objekt, wkt, liste med shapely-objekter eller shapely-sekvenser 
+# OBS: når man har shapely-objekter eller wkt, bør man sette crs. 
+def til_gdf(geom, set_crs=None, **qwargs) -> gpd.GeoDataFrame:
+
+    if isinstance(geom, str):
+        from shapely.wkt import loads
+        geom = loads(geom)
+        gdf = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(geom)}, **qwargs)
+    else:
+        gdf = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(geom)}, **qwargs)
+
+    if set_crs:
+        gdf = gdf.set_crs(set_crs)
+    
+    return gdf
+
+
+# teller opp antall nærliggende eller overlappende (hvis avstan=0) geometrier i to geodataframes.
+# gdf1 returneres med en ny kolonne ('antall') som forteller hvor mange geometrier (rader) fra gdf2 som er innen spesifisert avstand. 
+def antall_innen_avstand(gdf1: gpd.GeoDataFrame,
+                         gdf2: gpd.GeoDataFrame,
+                         avstand=0,
+                         kolonnenavn="antall") -> gpd.GeoDataFrame:
+
+    #lag midlertidig ID
+    gdf1["min_iddd"] = range(len(gdf1))
+
+    gdf1_kopi = gdf1.copy(deep=True)
+    gdf2_kopi = gdf2.copy(deep=True)
+
+    #buffer paa gdf2
+    if avstand>0:
+        gdf2_kopi["geometry"] = gdf2_kopi.buffer(avstand)
+    
+    #join med relevante kolonner
+    gdf1_kopi = gdf1_kopi[["min_iddd", "geometry"]]
+    gdf2_kopi = gdf2_kopi[["geometry"]]
+    joined = gpd.sjoin(gdf1_kopi, gdf2_kopi, how="inner")
+
+    #tell opp antall overlappende gdf2-geometrier, gjor om NA til 0 og sorg for at kolonnen er integer (heltall)
+    joined[kolonnenavn] = joined['min_iddd'].map(joined['min_iddd'].value_counts()).fillna(0).astype(int)
+
+    #fjern duplikater
+    joined = joined.drop_duplicates("min_iddd")
+
+    #koble kolonnen 'antall' til den opprinnelige gdf1
+    joined = pd.DataFrame(joined[['min_iddd',kolonnenavn]])
+    gdf1 = gdf1.drop([kolonnenavn], axis=1, errors='ignore') #fjern kolonnen antall hvis den allerede finnes i inputen
+    gdf1 = gdf1.merge(joined, on = 'min_iddd', how = 'left')
+
+    #fjern midlertidig ID
+    gdf1 = gdf1.drop("min_iddd",axis=1)
+
+    return(gdf1)
+
 
 # lager n tilfeldige punkter innenfor et gitt område (mask)
 def tilfeldige_punkter(n, mask=None):
