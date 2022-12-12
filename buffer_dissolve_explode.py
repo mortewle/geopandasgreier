@@ -1,6 +1,4 @@
 import geopandas as gpd
-import numpy as np
-from pandas.core.base import PandasObject
 
 
 """
@@ -14,17 +12,24 @@ Gjelder for alle funksjonene:
 """
 
 
-def buff(gdf, avstand, resolution=50, **qwargs) -> gpd.GeoDataFrame:
-    """ buffer med høyere oppløsning som returnerer kopi av GeoDataFrame (hvis GeoDataFrame er input, ellers GeoSeries/shapely-objekt)"""
-
-    kopi = gdf.copy()
+def buff(gdf, avstand, 
+         resolution=50, 
+         copy=True, # kopiering tar mer plass i minnet, så greit å kunne unngå det hvis man vil
+         **qwargs) -> gpd.GeoDataFrame:
+    """ 
+    buffer med høyere oppløsning 
+    returnerer kopi av GeoDataFrame (hvis GeoDataFrame er input, ellers GeoSeries/shapely-objekt)
+    """
+    
+    if copy:
+        gdf = gdf.copy()
     if isinstance(gdf, gpd.GeoDataFrame):
-        kopi["geometry"] = kopi.buffer(avstand, resolution=resolution, **qwargs)
-        kopi["geometry"] = kopi.make_valid()
+        gdf["geometry"] = gdf.buffer(avstand, resolution=resolution, **qwargs)
+        gdf["geometry"] = gdf.make_valid()
     else:
-        kopi = kopi.buffer(avstand, resolution=resolution, **qwargs)
-        kopi = kopi.make_valid()
-    return kopi
+        gdf = gdf.buffer(avstand, resolution=resolution, **qwargs)
+        gdf = gdf.make_valid()
+    return gdf
 
  
 def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
@@ -59,8 +64,14 @@ def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
 
 
 def exp(gdf, ignore_index=True, **qwargs) -> gpd.GeoDataFrame:
-    """ explode (til singlepart) som ignorerer index som default """
+    """ explode (til singlepart) som ignorerer index som default (samme som i pandas) """
     return gdf.explode(ignore_index=ignore_index, **qwargs)
+
+
+from pandas.core.base import PandasObject
+PandasObject.buff = buff
+PandasObject.diss = diss
+PandasObject.exp = exp
 
 
 # bufrer og samler overlappende. Altså buffer, dissolve, explode (til singlepart). 
@@ -74,22 +85,16 @@ def buffdissexp(gdf,
                 ) -> gpd.GeoDataFrame: 
 
     if by:
-        kopi = gdf.copy()
-        kopi["geometry"] = kopi.buffer(avstand, resolution=resolution).buffer(0)
-        kopi = kopi.loc[:, ~kopi.columns.str.contains('index|level_')]
-        dissolvet = kopi.dissolve(**diss_qwargs)
-        kopi["geometry"] = kopi.buffer(0)
-        dissolvet = dissolvet.reset_index()
-        dissolvet.columns = ["_".join(kolonne).strip("_") 
-                            if isinstance(kolonne, tuple) else kolonne 
-                            for kolonne in dissolvet.columns]
-
-        singlepart = dissolvet.loc[:, ~dissolvet.columns.str.contains('index|level_')]
-    
-    if by is None:
-        #dissolver her før buffer fordi det er raskere
-        dissolvet_bufret = gdf.unary_union.buffer(avstand, resolution=resolution).buffer(0)
-        singlepart = (gpd.GeoDataFrame({"geometry": gpd.GeoSeries(dissolvet_bufret)}).set_crs(gdf.crs)
+        singlepart = (gdf
+                    .buff(avstand, resolution)
+                    .diss(by, **diss_qwargs)
+                    .exp()
+        )
+    else:
+        bufret_dissolvet = gdf.buffer(avstand, resolution=resolution).unary_union
+        singlepart = (gpd.GeoDataFrame({"geometry": gpd.GeoSeries(bufret_dissolvet)})
+                      .set_crs(gdf.crs)
+                      .make_valid()
                       .explode(ignore_index=True, index_parts=False)
                       )
         
@@ -104,19 +109,18 @@ def buffdissexp(gdf,
 def dissexp(gdf, by=None, id=None, **qwargs) -> gpd.GeoDataFrame: 
 
     if by:
-        dissolvet = gdf.diss(by=by, **qwargs)
-        singlepart = dissolvet.exp()
-        
-    if by is None:
-        dissolvet = gdf.unary_union
-        dissolvet_gdf = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(dissolvet)}).set_crs(gdf.crs)
-        dissolvet_gdf["geometry"] = dissolvet_gdf.geometry.apply(lambda x: x.buffer(0) if x.buffer(0).is_empty==False else x)
-        singlepart = dissolvet_gdf.explode(ignore_index=True, index_parts=False)
+        singlepart = gdf.diss(by, **qwargs).exp()
+    else:
+        singlepart = (gpd.GeoDataFrame({"geometry": gpd.GeoSeries(gdf.unary_union)})
+                      .set_crs(gdf.crs)
+                      .make_valid()
+                      .explode(ignore_index=True, index_parts=False)
+                      )
         
     if id:
         singlepart[id] = list(range(len(singlepart)))
     
-    return(singlepart)
+    return singlepart
 
 
 
@@ -141,36 +145,8 @@ def buffdiss(gdf,
         
     if id:
         dissolvet[id] = list(range(len(dissolvet)))
-    
-    return(dissolvet)
 
-
-
-#buffer, dissolve, tett indre hull i polygonene, bufre innover, singlepart.
-def buffutinn(gdf,
-              avstand, #buffer-avstand
-              resolution=50, #oppløsningen på bufringen
-              by = None, 
-              id=None, 
-              tett_hull=True,
-              **diss_qwargs # flere dissolve-argumenter
-              ) -> gpd.GeoDataFrame:
-
-    from shapely.geometry import Polygon
-
-    bufret = gdf.buff(avstand, resolution)
-    dissolvet = bufret.diss(by = by, **diss_qwargs)
-        
-    if tett_hull:
-        dissolvet.geometry = dissolvet.geometry.apply(lambda x: Polygon(x.exterior.coords))
-
-    antibufret = dissolvet.buff(avstand*-1, resolution)
-    singlepart = antibufret.exp()
-
-    if id:
-        singlepart[id] = list(range(len(singlepart)))
-
-    return singlepart
+    return dissolvet
 
 
 # samler også overlappende geometrier innad i hver rad, men samler ikke rader. 
