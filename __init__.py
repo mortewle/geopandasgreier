@@ -7,7 +7,6 @@ from pandas.core.base import PandasObject
 PandasObject.buffdissexp = buffdissexp
 PandasObject.buffdiss = buffdiss
 PandasObject.dissexp = dissexp
-PandasObject.buffutinn = buffutinn
 PandasObject.buff = buff
 PandasObject.diss = diss
 PandasObject.exp = exp
