@@ -1,16 +1,18 @@
-# ort
+""" ort """
+from geopandasgreier.buffer_dissolve_explode import buff, diss, exp, buffdiss, dissexp, buffdissexp, tett_hull
+from geopandasgreier.generelt import *
+from geopandasgreier.spesifikt import *
 
-from geopandasgreier.buffer_dissolve_explode import *
 
 #gjør at funksjonene kan brukes som metoder sånn som i pandas, altså at man skriver gdf.funksjon heller enn funksjon(gdf)
-from pandas.core.base import PandasObject
-PandasObject.buffdissexp = buffdissexp
-PandasObject.buffdiss = buffdiss
-PandasObject.dissexp = dissexp
-PandasObject.buff = buff
-PandasObject.diss = diss
-PandasObject.exp = exp
-PandasObject.tett_hull = tett_hull
+#from pandas.core.base import PandasObject
+#PandasObject.buffdissexp = buffdissexp
+#PandasObject.buffdiss = buffdiss
+#PandasObject.dissexp = dissexp
+#PandasObject.buff = buff
+#PandasObject.diss = diss
+#PandasObject.exp = exp
+#PandasObject.tett_hull = tett_hull
 
 
 #små støttefunksjoner
