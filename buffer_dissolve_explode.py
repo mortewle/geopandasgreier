@@ -1,3 +1,4 @@
+import pandas as pd
 import geopandas as gpd
 
 
@@ -10,7 +11,6 @@ Gjelder for alle funksjonene:
  - index ignoreres og resettes alltid og kolonner som har med index å gjøre fjernes fordi de kan gi unødvendige feilmeldinger
  - hvis ikke 'by' spesifiseres når dissolve brukes, returneres bare geometrikolonnen og eventuelt id-kolonne
 """
-
 
 def buff(gdf, avstand, 
          resolution=50, 
@@ -38,11 +38,7 @@ def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
     med aggfunc='sum' som default fordi 'first' gir null mening
     hvis flere aggfuncs, gjøres kolonnene om til string, det vil si fra (kolonne, sum) til kolonne_sum
     """
-
-#    if aggfunc=="sum":
- #       aggfunc = {col: "sum" for col, dtype in zip(gdf.columns, gdf.dtypes)
-  #                  if "float" in str(dtype) or "int" in str(dtype)}
-        
+    
     dissolvet = (gdf
                  .loc[:, ~gdf.columns.str.contains('index|level_')]
                  .dissolve(by=by, aggfunc=aggfunc, **qwargs)
@@ -50,10 +46,6 @@ def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
     )
             
     dissolvet["geometry"] = dissolvet.make_valid()
-    
-    # legg til aggfunc i kolonnenavnet
-    if isinstance(aggfunc, dict):
-        dissolvet.columns = [col+"_"+aggfunc[col] if col in aggfunc else col for col in dissolvet.columns]
                 
     # gjør kolonner fra tuple til string
     dissolvet.columns = ["_".join(kolonne).strip("_") 
@@ -64,14 +56,9 @@ def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
 
 
 def exp(gdf, ignore_index=True, **qwargs) -> gpd.GeoDataFrame:
-    """ explode (til singlepart) som ignorerer index som default (samme som i pandas) """
+    """ explode (til singlepart) som reparerer geometrien og ignorerer index som default (samme som i pandas) """
+    gdf["geometry"] = gdf.geometry.make_valid()
     return gdf.explode(ignore_index=ignore_index, **qwargs)
-
-
-from pandas.core.base import PandasObject
-PandasObject.buff = buff
-PandasObject.diss = diss
-PandasObject.exp = exp
 
 
 # bufrer og samler overlappende. Altså buffer, dissolve, explode (til singlepart). 
@@ -85,18 +72,15 @@ def buffdissexp(gdf,
                 ) -> gpd.GeoDataFrame: 
 
     if by:
-        singlepart = (gdf
-                    .buff(avstand, resolution)
-                    .diss(by, **diss_qwargs)
-                    .exp()
-        )
+        bufret = buff(gdf, avstand, resolution)
+        dissolvet = diss(bufret, by, **diss_qwargs)
+        singlepart = exp(dissolvet)
+        
     else:
-        bufret_dissolvet = gdf.buffer(avstand, resolution=resolution).unary_union
-        singlepart = (gpd.GeoDataFrame({"geometry": gpd.GeoSeries(bufret_dissolvet)})
-                      .set_crs(gdf.crs)
-                      .make_valid()
-                      .explode(ignore_index=True, index_parts=False)
-                      )
+        bufret = gdf.buffer(avstand, resolution=resolution)
+        dissolvet = gpd.GeoDataFrame(pd.DataFrame({"geometry": gpd.GeoSeries(bufret.unary_union)}), geometry="geometry", crs=gdf.crs)
+        dissolvet["geometry"] = dissolvet.make_valid()
+        singlepart = dissolvet.explode(ignore_index=True)
         
     if id:
         singlepart[id] = list(range(len(singlepart)))
@@ -109,19 +93,17 @@ def buffdissexp(gdf,
 def dissexp(gdf, by=None, id=None, **qwargs) -> gpd.GeoDataFrame: 
 
     if by:
-        singlepart = gdf.diss(by, **qwargs).exp()
+        dissolvet = diss(gdf, by, **qwargs)
+        singlepart = exp(dissolvet)
     else:
-        singlepart = (gpd.GeoDataFrame({"geometry": gpd.GeoSeries(gdf.unary_union)})
-                      .set_crs(gdf.crs)
-                      .make_valid()
-                      .explode(ignore_index=True, index_parts=False)
-                      )
+        dissolvet = gpd.GeoDataFrame(pd.DataFrame({"geometry": gpd.GeoSeries(gdf.unary_union)}), geometry="geometry", crs=gdf.crs)
+        dissolvet["geometry"] = dissolvet.make_valid()
+        singlepart = dissolvet.explode(ignore_index=True)
         
     if id:
         singlepart[id] = list(range(len(singlepart)))
     
     return singlepart
-
 
 
 # buffer, dissolve. 
@@ -136,12 +118,13 @@ def buffdiss(gdf,
              ) -> gpd.GeoDataFrame: 
 
     if by:
-        bufret = gdf.buff(avstand, resolution)
-        dissolvet = bufret.diss(by=by, **diss_qwargs)
+        bufret = buff(gdf, avstand, resolution)
+        dissolvet = diss(bufret, by, **diss_qwargs)
         
     if by is None:
-        dissolvet = gdf.unary_union.buffer(avstand, resolution=resolution).buffer(0)
-        dissolvet = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(dissolvet)}).set_crs(gdf.crs)
+        bufret = gdf.buffer(avstand, resolution=resolution)
+        dissolvet = gpd.GeoDataFrame(pd.DataFrame({"geometry": gpd.GeoSeries(bufret.unary_union)}), geometry="geometry", crs=gdf.crs)
+        dissolvet["geometry"] = dissolvet.make_valid()
         
     if id:
         dissolvet[id] = list(range(len(dissolvet)))
@@ -152,10 +135,11 @@ def buffdiss(gdf,
 # samler også overlappende geometrier innad i hver rad, men samler ikke rader. 
 def tett_hull(geom, max_km2=None):
 
-    from shapely import polygons, get_exterior_ring, get_parts, get_num_interior_rings, get_interior_ring, area, unary_union
+    from shapely import polygons, get_exterior_ring, get_parts, get_num_interior_rings, get_interior_ring, area
+    from shapely.ops import unary_union
     
     # tettingen gjøres i shapely og apply-es på hver rad av inputen.
-    def tett_i_shapely(x, max_km2=max_km2):
+    def tett_med_shapely(x, max_km2=max_km2):
                 
         # hvis alle hull skal tettes, lages det polygon av yttergrensene
         if max_km2 is None:
@@ -176,14 +160,14 @@ def tett_hull(geom, max_km2=None):
 
     if isinstance(geom, gpd.GeoDataFrame):
         kopi = geom.copy(deep=True)
-        kopi["geometry"] = kopi.geometry.map(lambda x: tett_i_shapely(x, max_km2))
+        kopi["geometry"] = kopi.geometry.map(lambda x: tett_med_shapely(x, max_km2))
 
     elif isinstance(geom, gpd.GeoSeries):
         kopi = geom.copy()
-        kopi = kopi.map(lambda x: tett_i_shapely(x, max_km2))
+        kopi = kopi.map(lambda x: tett_med_shapely(x, max_km2))
         kopi = gpd.GeoSeries(kopi)
 
     else: #hvis geom er shapely-objekt/array
-        kopi = tett_i_shapely(geom, max_km2)
+        kopi = tett_med_shapely(geom, max_km2)
 
     return kopi
