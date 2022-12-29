@@ -1,17 +1,23 @@
-
+import geopandas as gpd
+import pandas as pd
 
 
 def finn_naboer(gdf, mulige_naboer, id_kolonne, innen_meter = 1):
     """ 
     finner geometrier som er maks. 1 meter unna.
-    i alle retninger (queen contiguity)"""
+    i alle retninger (queen contiguity). """
 
-    return [x for x in (gdf
-                        .to_crs(25833)
-                        .buff(innen_meter, resolution=16)[["geometry"]]
-                        .sjoin(mulige_naboer, how="inner")
-                        .loc[:, id_kolonne]
-                        .unique())]
+    mulige_naboer = mulige_naboer.to_crs(25833)
+
+    bufret = (gdf
+              .to_crs(25833)
+              .buffer(innen_meter)
+              .to_frame()
+    )
+    
+    joinet = bufret.sjoin(mulige_naboer, how="inner")
+    
+    return [x for x in joinet[id_kolonne].unique()]
 
 
 def gridish(gdf, meter, x2 = False):
