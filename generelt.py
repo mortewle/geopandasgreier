@@ -47,6 +47,8 @@ def til_gdf(geom, crs=None, **qwargs) -> gpd.GeoDataFrame:
     OBS: når man har shapely-objekter eller wkt, bør man velge crs. """
 
     if not crs:
+        if isinstance(geom, str):
+            raise ValueError("Du må bestemme crs når input er string.")
         crs = geom.crs
         
     if isinstance(geom, str):
@@ -69,8 +71,7 @@ def overlay_update(gdf1, gdf2) -> gpd.GeoDataFrame:
     return out
 
 
-def min_sjoin(left_gdf, right_gdf, dask=False, npartitions=8, **kwargs) -> gpd.GeoDataFrame:
-
+def min_sjoin(left_gdf, right_gdf, **kwargs) -> gpd.GeoDataFrame:
     """ 
     som gpd.sjoin bare at kolonner i right_gdf som også er i left_gdf fjernes (fordi det snart vil gi feilmelding i geopandas)
     og kolonner som har med index å gjøre fjernes, fordi sjoin returnerer index_right som kolonnenavn, som gir feilmelding ved neste join. 
