@@ -5,7 +5,7 @@ import geopandas as gpd
 """
 Funksjoner som bufrer, dissolver og/eller gjør om fra multipart til singlepart (explode)
 
-Gjelder for alle funksjonene:
+Regler for alle funksjonene:
  - høyere buffer-oppløsning enn standard
  - reparerer geometrien etter buffer og dissolve, men ikke etter explode, siden reparering kan returnere multipart-geometrier
  - index ignoreres og resettes alltid og kolonner som har med index å gjøre fjernes fordi de kan gi unødvendige feilmeldinger
@@ -17,18 +17,20 @@ def buff(gdf, avstand,
          copy=True, # kopiering tar mer plass i minnet, så greit å kunne unngå det hvis man vil
          **qwargs) -> gpd.GeoDataFrame:
     """ 
-    buffer med høyere oppløsning 
-    returnerer kopi av GeoDataFrame (hvis GeoDataFrame er input, ellers GeoSeries/shapely-objekt)
+    buffer med høyere oppløsning som reparerer geometrien.
+    returnerer kopi av GeoDataFrame (hvis GeoDataFrame er input, ellers GeoSeries/shapely-objekt).
     """
     
     if copy:
         gdf = gdf.copy()
+        
     if isinstance(gdf, gpd.GeoDataFrame):
         gdf["geometry"] = gdf.buffer(avstand, resolution=resolution, **qwargs)
         gdf["geometry"] = gdf.make_valid()
     else:
         gdf = gdf.buffer(avstand, resolution=resolution, **qwargs)
         gdf = gdf.make_valid()
+    
     return gdf
 
  
@@ -57,7 +59,7 @@ def diss(gdf, by=None, aggfunc = "sum", **qwargs) -> gpd.GeoDataFrame:
 
 def exp(gdf, ignore_index=True, **qwargs) -> gpd.GeoDataFrame:
     """ explode (til singlepart) som reparerer geometrien og ignorerer index som default (samme som i pandas) """
-    gdf["geometry"] = gdf.geometry.make_valid()
+    gdf["geometry"] = gdf.make_valid() # reparerer før explode fordi reparering kan skape multigeometrier
     return gdf.explode(ignore_index=ignore_index, **qwargs)
 
 
@@ -74,11 +76,11 @@ def buffdissexp(gdf,
     if by:
         bufret = buff(gdf, avstand, resolution)
         dissolvet = diss(bufret, by, **diss_qwargs)
-        singlepart = exp(dissolvet)
+        singlepart = dissolvet.explode(ignore_index=True)
         
     else:
         bufret = gdf.buffer(avstand, resolution=resolution)
-        dissolvet = gpd.GeoDataFrame(pd.DataFrame({"geometry": gpd.GeoSeries(bufret.unary_union)}), geometry="geometry", crs=gdf.crs)
+        dissolvet = gpd.GeoDataFrame({"geometry": gpd.GeoSeries(bufret.unary_union)}, geometry="geometry", crs=gdf.crs)
         dissolvet["geometry"] = dissolvet.make_valid()
         singlepart = dissolvet.explode(ignore_index=True)
         
@@ -94,7 +96,7 @@ def dissexp(gdf, by=None, id=None, **qwargs) -> gpd.GeoDataFrame:
 
     if by:
         dissolvet = diss(gdf, by, **qwargs)
-        singlepart = exp(dissolvet)
+        singlepart = dissolvet.explode(ignore_index=True)
     else:
         dissolvet = gpd.GeoDataFrame(pd.DataFrame({"geometry": gpd.GeoSeries(gdf.unary_union)}), geometry="geometry", crs=gdf.crs)
         dissolvet["geometry"] = dissolvet.make_valid()
