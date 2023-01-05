@@ -134,8 +134,9 @@ def buffdiss(gdf,
     return dissolvet
 
 
-# samler også overlappende geometrier innad i hver rad, men samler ikke rader. 
 def tett_hull(geom, max_km2=None):
+    """ Tetter hull inni polygoner. Kun hull under max_km2 hvis max_km2 er oppgitt. 
+    Samler også overlappende geometrier innad i hver rad, men samler ikke rader. """
 
     from shapely import polygons, get_exterior_ring, get_parts, get_num_interior_rings, get_interior_ring, area
     from shapely.ops import unary_union
