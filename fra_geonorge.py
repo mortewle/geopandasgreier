@@ -2,10 +2,10 @@ import geopandas as gpd
 import requests
 import shutil
 import os
-import zipfile
+from zipfile import ZipFile
 
 
-def geonorge_json(metadataUuid, crs="25833", format = "FGDB 10.0"):
+def geonorge_json(metadataUuid, crs="25833", format = "FGDB 10.0"): # "GML 3.2.1"
     return {
     "orderLines": [
         {"metadataUuid": metadataUuid,
@@ -16,7 +16,7 @@ def geonorge_json(metadataUuid, crs="25833", format = "FGDB 10.0"):
 
 
 def unzipp(zipfil, unzippet_fil):
-    with zipfile.ZipFile(zipfil, 'r') as z:
+    with ZipFile(zipfil, 'r') as z:
         z.extractall(unzippet_fil)
 
 
