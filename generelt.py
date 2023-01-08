@@ -66,8 +66,8 @@ def overlay_update(gdf1, gdf2) -> gpd.GeoDataFrame:
     en overlay-variant som ikke finnes i geopandas. """
     
     out = gdf1.overlay(gdf2, how = "difference", keep_geom_type=True)
-    out = gdf_concat([out, gdf2])
     out = out.loc[:, ~out.columns.str.contains('index|level_')]
+    out = gdf_concat([out, gdf2])
     return out
 
 
@@ -82,16 +82,10 @@ def min_sjoin(left_gdf, right_gdf, **kwargs) -> gpd.GeoDataFrame:
     right_gdf = right_gdf.loc[:, ~right_gdf.columns.str.contains('index|level_')]
 
     #fjern kolonner fra gdf2 som er i gdf1
-    fjernede_kolonner = []
-    for kolonne in right_gdf.columns:
-        if kolonne in left_gdf.columns:
-            if kolonne != "geometry":
-                right_gdf = right_gdf.drop(kolonne, axis=1)
-                fjernede_kolonner.append(kolonne)
-    if len(fjernede_kolonner) > 0:
-        print(f"OBS: fjerner kolonnene {', '.join(fjernede_kolonner)} fra right_gdf fordi de finnes i left_gdf")
+    right_gdf.columns = [col if col not in left_gdf.columns or col=="geometry" else "skal_fjernes" for col in right_gdf.columns]
+    right_gdf = right_gdf.loc[:, ~right_gdf.columns.str.contains('index|level_|skal_fjernes')]
 
-    joinet = left_gdf.sjoin(right_gdf, **kwargs)
+    joinet = left_gdf.sjoin(right_gdf, **kwargs).reset_index()
         
     return joinet.loc[:, ~joinet.columns.str.contains('index|level_')]
 
