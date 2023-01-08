@@ -6,9 +6,9 @@ def finn_naboer(gdf, mulige_naboer, id_kolonne, innen_meter = 1):
     """ 
     finner geometrier som er maks. 1 meter unna.
     i alle retninger (queen contiguity). """
-
+    
     mulige_naboer = mulige_naboer.to_crs(25833)
-
+    
     bufret = (gdf
               .to_crs(25833)
               .buffer(innen_meter)
@@ -54,7 +54,7 @@ def gridish(gdf, meter, x2 = False):
     return gdf
 
 
-def snap_til(punkter, snap_til, maks_distanse=500):
+def snap_til(punkter, snap_til, maks_distanse=500, copy=False):
     """
     Snapper (flytter) punkter til naermeste punkt/linje/polygon innen en gitt maks_distanse.
     Går via nearest_points for å finne det nøyaktige punktet. Med kun snap() blir det unøyaktig.
@@ -63,7 +63,10 @@ def snap_til(punkter, snap_til, maks_distanse=500):
     from shapely.ops import nearest_points, snap
 
     snap_til_shapely = snap_til.unary_union
-
+    
+    if copy:
+        punkter = punkter.copy()
+        
     if isinstance(punkter, gpd.GeoDataFrame):
         for i, punkt in enumerate(punkter.geometry):
             nearest = nearest_points(punkt, snap_til_shapely)[1] 
@@ -90,17 +93,14 @@ def antall_innen_avstand(gdf1: gpd.GeoDataFrame,
     #lag midlertidig ID
     gdf1["min_iddd"] = range(len(gdf1))
 
-    gdf1_kopi = gdf1.copy(deep=True)
-    gdf2_kopi = gdf2.copy(deep=True)
 
     #buffer paa gdf2
     if avstand>0:
-        gdf2_kopi["geometry"] = gdf2_kopi.buffer(avstand)
+        gdf2 = gdf2.copy()
+        gdf2["geometry"] = gdf2.buffer(avstand)
     
     #join med relevante kolonner
-    gdf1_kopi = gdf1_kopi[["min_iddd", "geometry"]]
-    gdf2_kopi = gdf2_kopi[["geometry"]]
-    joined = gpd.sjoin(gdf1_kopi, gdf2_kopi, how="inner")
+    joined = gdf1[["min_iddd", "geometry"]].sjoin(gdf2[["geometry"]], how="inner")
 
     #tell opp antall overlappende gdf2-geometrier, gjor om NA til 0 og sorg for at kolonnen er integer (heltall)
     joined[kolonnenavn] = joined['min_iddd'].map(joined['min_iddd'].value_counts()).fillna(0).astype(int)
@@ -116,36 +116,36 @@ def antall_innen_avstand(gdf1: gpd.GeoDataFrame,
     #fjern midlertidig ID
     gdf1 = gdf1.drop("min_iddd",axis=1)
 
-    return(gdf1)
+    return gdf1
 
 
-def til_multipunkt(geom):
+def til_multipunkt(geom, copy=False):
 
     from shapely.wkt import loads
+    from shapely import force_2d
     from shapely.ops import unary_union
     
+    if copy:
+        geom = geom.copy()
+
     def til_multipunkt_i_shapely(geom):
-        koordinater = geom.wkt.replace("MULTI","").replace("LINESTRING ","").replace("POLYGON ","").replace("LINEARRING ","").replace("GEOMETRYCOLLECTION ","").replace("(","").replace(")","").replace("(","").replace(")","").replace("(","").replace(")","").strip(" ")
-        koordinater_liste = koordinater.split(",")
-        alle_punkter = []
-        for punkt in koordinater_liste:
-            wkt = loads(f"POINT ({punkt})")
-            alle_punkter.append(wkt)
-        alle_punkter = unary_union(alle_punkter)
-        return alle_punkter
+
+        koordinater = ''.join([x for x in geom.wkt if x.isdigit() or x.isspace() or x=="." or x==","]).strip()
+
+        alle_punkter = [loads(f"POINT ({punkt})") for punkt in koordinater.split(",")]
+
+        return unary_union(alle_punkter)
 
     if isinstance(geom, gpd.GeoDataFrame):
-        out = geom.copy(deep=True)
-        out["geometry"] = out.force_2d()
-        out["geometry"] = out.geometry.apply(lambda x: til_multipunkt_i_shapely(x))
+        geom["geometry"] = force_2d(geom.geometry)
+        geom["geometry"] = geom.geometry.apply(lambda x: til_multipunkt_i_shapely(x))
 
     elif isinstance(geom, gpd.GeoSeries):
-        out = geom.copy(deep=True)
-        out = out.force_2d()
-        out = out.apply(lambda x: til_multipunkt_i_shapely(x))
+        geom = force_2d(geom)
+        geom = geom.apply(lambda x: til_multipunkt_i_shapely(x))
 
     else:
-        out = out.force_2d()
-        out = til_multipunkt_i_shapely(unary_union(out))
+        geom = force_2d(geom)
+        geom = til_multipunkt_i_shapely(unary_union(geom))
 
-    return out
+    return geom
