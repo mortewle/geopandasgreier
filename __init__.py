@@ -1,18 +1,20 @@
 """ ort """
+
+# først noen kjappe tester av funksjonene og GIS-algoritmene
+from geopandasgreier.testing.test import test_alt
+try:
+    test_alt()
+except Exception as e:
+    print("OBS: klarte ikke geopandasgreier-testene:")
+    print(e)
+    print("Sjekk geopandasgreier.testing.test for mer detaljer.")
+
+del test_alt
+
 from geopandasgreier.buffer_dissolve_explode import buff, diss, exp, buffdiss, dissexp, buffdissexp, tett_hull
 from geopandasgreier.generelt import *
 from geopandasgreier.spesifikt import *
 
-
-#gjør at funksjonene kan brukes som metoder sånn som i pandas, altså at man skriver gdf.funksjon heller enn funksjon(gdf)
-#from pandas.core.base import PandasObject
-#PandasObject.buffdissexp = buffdissexp
-#PandasObject.buffdiss = buffdiss
-#PandasObject.dissexp = dissexp
-#PandasObject.buff = buff
-#PandasObject.diss = diss
-#PandasObject.exp = exp
-#PandasObject.tett_hull = tett_hull
 
 
 #små støttefunksjoner
