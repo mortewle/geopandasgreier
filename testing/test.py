@@ -1,3 +1,4 @@
+#%%
 import os
 os.environ['USE_PYGEOS'] = '0'
 import geopandas as gpd
@@ -11,13 +12,15 @@ while "geopandasgreier" not in os.listdir():
 sys.path.append(os.getcwd())
 
 from geopandasgreier.buffer_dissolve_explode import buff, diss, buffdiss, dissexp, buffdissexp
-from geopandasgreier.generelt import gdf_concat, til_gdf, fjern_tomme_geometrier
+from geopandasgreier.generelt import gdf_concat, til_gdf, fjern_tomme_geometrier, min_sjoin, overlay_update
+from geopandasgreier.spesifikt import finn_naboer, gridish, snap_til, antall_innen_avstand, til_multipunkt
 
 
 def lag_gdf():
     """ 
     Lager en gdf med punkter, linje og polygon. 
     Dette bør gi samme og riktige resultater hver gang. 
+    OBS: denne må aldri endres.
     """
     
     xs = [10.7497196, 10.7484624, 10.7480624, 10.7384624, 10.7374624, 10.7324624, 10.7284624]
@@ -46,18 +49,7 @@ def lag_gdf():
     return gdf
 
 
-def test_tomme_nan():
-    gdf = lag_gdf()
-    manglende = gpd.GeoDataFrame({'geometry': [None]}, geometry="geometry", crs=25833)
-    tomme = gpd.GeoDataFrame({'geometry':  gpd.GeoSeries(loads("POINT (0 0)")).buffer(0)}, geometry="geometry", crs=25833)
-    gdf = gdf_concat([gdf, manglende, tomme])
-    assert len(gdf)==11
-    gdf = fjern_tomme_geometrier(gdf)
-    assert len(gdf)==9
-    
-    
-def test_buffdissexp():
-    gdf = lag_gdf()
+def test_buffdissexp(gdf):
     for avstand in [1, 10, 100, 1000, 10000]:
         kopi = gdf.copy()
         kopi = kopi[["geometry"]]
@@ -79,16 +71,14 @@ def test_buffdissexp():
         assert areal1==kopi.area.sum() and lengde1==kopi.length.sum(), "ulik lengde/areal"
 
 
-def test_geos():
-    gdf = lag_gdf()
+def test_geos(gdf):
     kopi = buffdissexp(gdf, 25, copy=True)
     assert len(kopi)==4,  "feil antall rader. Noe galt/nytt med GEOS' GIS-algoritmer?"
     assert round(kopi.area.sum(), 5) == 1035381.10389, "feil areal. Noe galt/nytt med GEOS' GIS-algoritmer?"
     assert round(kopi.length.sum(), 5) == 16689.46148, "feil lengde. Noe galt/nytt med GEOS' GIS-algoritmer?"
 
 
-def test_aggfuncs():
-    gdf = lag_gdf()
+def test_aggfuncs(gdf):
     kopi = dissexp(gdf, by="txtkol", aggfunc="sum")
     assert len(kopi)==11, "dissexp by txtkol skal gi 11 rader, tre stykk linestrings..."
 
@@ -108,19 +98,123 @@ def test_aggfuncs():
     kopi = buffdissexp(gdf, 100, by=["numkol", "txtkol"],copy=True)
     assert "numkol" in kopi.columns and "txtkol" in kopi.columns, "kolonnene mangler. Er de index?"
     assert len(kopi)==9, "feil lengde"
+    
 
+def test_tomme_nan(gdf):
+    manglende = gpd.GeoDataFrame({'geometry': [None]}, geometry="geometry", crs=25833)
+    tomme = gpd.GeoDataFrame({'geometry':  gpd.GeoSeries(loads("POINT (0 0)")).buffer(0)}, geometry="geometry", crs=25833)
+    gdf = gdf_concat([gdf, manglende, tomme])
+    assert len(gdf)==11
+    gdf = fjern_tomme_geometrier(gdf)
+    assert len(gdf)==9
+    
+    
+def sjoin_overlay(gdf):
+    gdf1 = buff(gdf, 25, copy=True)
+    gdf2 = buff(gdf, 100, copy=True)
+    gdf2["nykoll"] = 1
+    gdf = min_sjoin(gdf1, gdf2)
+    assert list(gdf.columns)==['geometry', 'numkol', 'txtkol', 'nykoll']
+    assert len(gdf)==25
+
+    gdf = overlay_update(gdf2, gdf1)
+    assert list(gdf.columns)==['geometry', 'numkol', 'txtkol', 'nykoll']
+    assert len(gdf)==18
+    
+    
+def test_copy(gdf):
+    """
+    Sjekk at copy-parametret i buff funker. Og sjekk pandas' copy-regler samtidig.
+    """
+    
+    kopi = gdf[gdf.area==0]
+    assert gdf.area.sum() != 0
+    
+    kopi = gdf.loc[gdf.area==0]    
+    assert gdf.area.sum() != 0
+    assert kopi.area.sum() == 0
+    
+    bufret = buff(kopi, 10, copy=True)
+    assert kopi.area.sum() == 0
+
+    bufret = buff(kopi, 10, copy=False)
+    assert kopi.area.sum() != 0
+    
+    
+def test_naboer(gdf):
+    naboer = finn_naboer(gdf.iloc[[0]], mulige_naboer=gdf, id_kolonne="numkol", innen_meter = 100)
+    assert naboer==[2,1], "feil i finn_naboer"
+    naboer = finn_naboer(gdf.iloc[[8]], mulige_naboer=gdf, id_kolonne="numkol", innen_meter = 100)
+    assert naboer==[7, 8, 9, 5, 4], "feil i finn_naboer"
+    
+
+def test_gridish(gdf):
+    kopi = gdf.copy()
+    kopi = gridish(kopi, 2000)
+    assert len(kopi.gridish.unique()) == 4
+    
+    kopi = gridish(kopi, 5000)
+    assert len(kopi.gridish.unique()) == 2
+
+    kopi = gridish(kopi, 1000, x2=True)
+    assert len(kopi.gridish.unique()) == 7
+    assert len(kopi.gridish2.unique()) == 7
+
+
+def test_snap(gdf):
+    punkter = gdf[gdf.length==0]
+    annet = gdf[gdf.length!=0]
+    snappet = snap_til(punkter, annet, maks_distanse=50000, copy=True)
+    assert all(snappet.intersects(annet.buffer(1).unary_union))
+    snappet = snap_til(punkter, annet, maks_distanse=50)
+    assert sum(snappet.intersects(annet.buffer(1).unary_union)) == 3
+
+
+def test_antall_innen_avstand(gdf):
+    innen = antall_innen_avstand(gdf, gdf)
+    assert innen.antall.sum() == 11
+    innen = antall_innen_avstand(gdf, gdf, 50)
+    assert innen.antall.sum() == 21
+    innen = antall_innen_avstand(gdf, gdf, 10000)
+    assert innen.antall.sum() == 81
+    
+    
+def test_til_multipunkt(gdf):
+    mp = til_multipunkt(gdf)
+    assert mp.length.sum() == 0
+    mp = til_multipunkt(gdf.geometry)
+    assert mp.length.sum() == 0
+    mp = til_multipunkt(gdf.unary_union)
+    assert mp.length == 0
+    
 
 def test_alt():
     
-    test_tomme_nan()
+    gdf = lag_gdf()
     
-    test_buffdissexp()
+    test_tomme_nan(gdf)
+    
+    test_buffdissexp(gdf)
 
-    test_geos()
+    test_geos(gdf)
 
-    test_aggfuncs()
-
-
+    test_aggfuncs(gdf)
+    
+    sjoin_overlay(gdf)
+    
+    test_naboer(gdf)
+    
+    test_gridish(gdf)
+    
+    test_copy(gdf)
+    
+    test_snap(gdf)
+    
+    test_antall_innen_avstand(gdf)
+    
+    test_til_multipunkt(gdf)
+    
+    
 def main():
     info = """
     Testen ble lagd 08.01.2023 med følgende versjoner.
