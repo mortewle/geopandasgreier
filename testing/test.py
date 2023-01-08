@@ -46,13 +46,12 @@ def lag_gdf():
     
     gdf["numkol"] = [1,2,3,4,5,6,7,8,9]
     gdf["txtkol"] = [*'aaaabbbcc']
+
+    assert len(gdf)==9, "feil lengde. Er testdataene endret?"
     
     x = round(gdf.dissolve().centroid.x.iloc[0], 5)
     y = round(gdf.dissolve().centroid.y.iloc[0], 5)
-    
-    assert  f'POINT ({x} {y})' == 'POINT (261106.48628 6649101.81219)', "feil midtpunkt. Er testdataene endret?"
-    
-    assert len(gdf)==9, "feil lengde. Er testdataene endret?"
+    assert  f'POINT ({x} {y})' == 'POINT (261106.48628 6649101.81219)', "feil midtpunkt. Er testdataene endret?"    
 
     return gdf
 
