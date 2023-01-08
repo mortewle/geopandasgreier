@@ -134,7 +134,7 @@ def buffdiss(gdf, avstand, resolution=50, by=None, id=None, copy = False, **diss
     return dissolvet
 
 
-def tett_hull(geom, max_km2=None):
+def tett_hull(geom, max_km2=None, copy=False):
     """
     Tetter hull inni polygoner. Kun hull under max_km2 hvis max_km2 er oppgitt.
     Samler også overlappende geometrier innad i hver rad, men samler ikke rader.
