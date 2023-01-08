@@ -1,4 +1,9 @@
-#%%
+"""
+Test om funksjonene gir forventede resultater. 
+Bruker en fast gdf som aldri må endres. 
+Funksjonen test_alt kjøres når man importerer geopandasgreier. Gir advarsel hvis en av testene feilet.
+"""
+
 import os
 os.environ['USE_PYGEOS'] = '0'
 import geopandas as gpd
@@ -18,8 +23,8 @@ from geopandasgreier.spesifikt import finn_naboer, gridish, snap_til, antall_inn
 
 def lag_gdf():
     """ 
-    Lager en gdf med punkter, linje og polygon. 
-    Dette bør gi samme og riktige resultater hver gang. 
+    Lager en gdf med 9 rader, bestående av sju punkter, en linje og ett polygon. 
+    tester samtidig funksjonen til_gdf
     OBS: denne må aldri endres.
     """
     
