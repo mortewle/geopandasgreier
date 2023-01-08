@@ -12,6 +12,7 @@ while "geopandasgreier" not in os.listdir():
 sys.path.append(os.getcwd())
 
 from geopandasgreier.buffer_dissolve_explode import buff, diss, buffdiss, dissexp, buffdissexp
+from geopandasgreier.generelt import gdf_concat, til_gdf, fjern_tomme_geometrier
 
 
 def lag_gdf():
@@ -26,6 +27,11 @@ def lag_gdf():
     geometrier = loads(punkter + linje + polygon)
 
     gdf = gpd.GeoDataFrame({'geometry': gpd.GeoSeries(geometrier)}, geometry="geometry", crs=4326).to_crs(25833)
+    
+    gdf2 = til_gdf(geometrier, crs=4326).to_crs(25833)
+    
+    assert gdf.equals(gdf2), "til_gdf gir ikke samme gdf som å lage gdf manuelt"
+    
     gdf["numkol"] = [1,2,3,4,5,6,7,8,9]
     gdf["txtkol"] = [*'aaaabbbcc']
     
@@ -36,6 +42,16 @@ def lag_gdf():
     return gdf
 
 
+def test_tomme_nan():
+    gdf = lag_gdf()
+    manglende = gpd.GeoDataFrame({'geometry': [None]}, geometry="geometry", crs=25833)
+    tomme = gpd.GeoDataFrame({'geometry':  gpd.GeoSeries(loads("POINT (0 0)")).buffer(0)}, geometry="geometry", crs=25833)
+    gdf = gdf_concat([gdf, manglende, tomme])
+    assert len(gdf)==11
+    gdf = fjern_tomme_geometrier(gdf)
+    assert len(gdf)==9
+    
+    
 def test_buffdissexp():
     gdf = lag_gdf()
     for avstand in [1, 10, 100, 1000, 10000]:
@@ -91,6 +107,8 @@ def test_aggfuncs():
 
 
 def test_alt():
+    
+    test_tomme_nan()
     
     test_buffdissexp()
 
