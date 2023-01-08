@@ -1,4 +1,3 @@
-#%%
 import os
 os.environ['USE_PYGEOS'] = '0'
 import geopandas as gpd
@@ -16,6 +15,11 @@ from geopandasgreier.generelt import gdf_concat, til_gdf, fjern_tomme_geometrier
 
 
 def lag_gdf():
+    """ 
+    Lager en gdf med punkter, linje og polygon. 
+    Dette bør gi samme og riktige resultater hver gang. 
+    """
+    
     xs = [10.7497196, 10.7484624, 10.7480624, 10.7384624, 10.7374624, 10.7324624, 10.7284624]
     ys = [59.9281407, 59.9275268, 59.9272268, 59.9175268, 59.9165268, 59.9365268, 59.9075268]
     punkter = [f'POINT ({x} {y})' for x, y in zip(xs, ys)]
@@ -117,8 +121,7 @@ def test_alt():
     test_aggfuncs()
 
 
-if __name__=="__main__":
-    
+def main():
     info = """
     Testen ble lagd 08.01.2023 med følgende versjoner.
     Fra C++: GEOS 3.11.1, PROJ 9.1.0, GDAL 3.6.1. 
@@ -137,3 +140,7 @@ if __name__=="__main__":
     test_alt()
 
     print("vellykket")
+    
+    
+if __name__=="__main__":
+    main()
