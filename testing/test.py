@@ -151,9 +151,11 @@ def test_copy(gdf):
     
 def test_naboer(gdf):
     naboer = finn_naboer(gdf.iloc[[0]], mulige_naboer=gdf, id_kolonne="numkol", innen_meter = 100)
-    assert naboer==[2,1], "feil i finn_naboer"
+    naboer.sort()
+    assert naboer==[1, 2], "feil i finn_naboer"
     naboer = finn_naboer(gdf.iloc[[8]], mulige_naboer=gdf, id_kolonne="numkol", innen_meter = 100)
-    assert naboer==[7, 8, 9, 5, 4], "feil i finn_naboer"
+    naboer.sort()
+    assert naboer==[4, 5, 7, 8, 9], "feil i finn_naboer"
     
 
 def test_gridish(gdf):
