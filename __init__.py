@@ -42,3 +42,10 @@ from geopandasgreier.generelt import (
 from geopandasgreier.spesifikt import (
     gridish,
 )
+
+from geopandasgreier.lesing_lagring import (
+    les_geopandas, 
+    skriv_geopandas,
+    eksisterer,
+    samle_filer,
+)
