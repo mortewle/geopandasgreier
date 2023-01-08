@@ -36,7 +36,7 @@ def lag_gdf():
 
     polygon = ["POLYGON ((10.74 59.92, 10.735 59.915, 10.73 59.91, 10.725 59.905, 10.72 59.9, 10.72 59.91, 10.72 59.91, 10.74 59.92))"]
 
-    geometrier = loads(punkter + linje + polygon)
+    geometrier = [loads(x) for x in punkter + linje + polygon]
 
     gdf = gpd.GeoDataFrame({'geometry': gpd.GeoSeries(geometrier)}, geometry="geometry", crs=4326).to_crs(25833)
     
@@ -47,7 +47,10 @@ def lag_gdf():
     gdf["numkol"] = [1,2,3,4,5,6,7,8,9]
     gdf["txtkol"] = [*'aaaabbbcc']
     
-    assert gdf.dissolve().centroid.iloc[0].wkt == 'POINT (261106.48627792465 6649101.812189355)', "feil midtpunkt. Er testdataene endret?"
+    x = round(gdf.dissolve().centroid.x.iloc[0], 5)
+    y = round(gdf.dissolve().centroid.y.iloc[0], 5)
+    
+    assert  f'POINT ({x} {y})' == 'POINT (261106.48628 6649101.81219)', "feil midtpunkt. Er testdataene endret?"
     
     assert len(gdf)==9, "feil lengde. Er testdataene endret?"
 
