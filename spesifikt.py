@@ -22,12 +22,13 @@ def finn_naboer(gdf, mulige_naboer, id_kolonne, innen_meter = 1):
 
 def gridish(gdf, meter, x2 = False):
     """
+    Enkel rutedeling av dataene. For å fleksibelt kunne loope for små områder sånn at ting blir håndterbart. 
     Gir dataene kolonne med avrundede xy-koordinater. Rundes av til valgfritt antall meter.
-    Hvis dataene er for tunge og man ikke har en kommunekolonne e.l. som gjør det enkelt å dele opp.
-    x2=True gir en kolonne til med ruter 1/2 hakk nedover og bortover. Hvis grensetilfeller er viktig, kan man loope en gang per rutekategorikolonne. """
+    x2=True gir en kolonne til med ruter 1/2 hakk nedover og bortover. Hvis grensetilfeller er viktig, kan man loope en gang per rutekategorikolonne. 
+    """
     
     # rund ned koordinatene og sett sammen til kolonne
-    gdf["gridish"] = round(gdf.geometry.bounds.minx/meter,1).astype(int).astype(str) + "_" + round(gdf.geometry.bounds.miny/meter,1).astype(int).astype(str)
+    gdf["gridish"] = [f"{round(minx/meter)}_{round(miny/meter)}" for minx, miny in zip(gdf.geometry.bounds.minx, gdf.geometry.bounds.miny)]
     
     if x2:
 
