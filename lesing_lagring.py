@@ -2,30 +2,8 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 
-
-def les_geopandas(sti, **qwargs):
-    
-    try:
-        from dapla import FileClient
-        fs = FileClient.get_gcs_file_system()
-        with fs.open(sti, mode='rb') as file: 
-            if "parquet" in sti:
-                return gpd.read_parquet(file, **qwargs)
-            return gpd.read_file(file, **qwargs)
-        
-    except Exception:
-        try:
-            return gpd.read_parquet(sti, **qwargs)
-        except Exception:
-            return gpd.read_file(sti, **qwargs)
-
-
-def skriv_geopandas(gdf, sti, **qwargs):
-    "kopier inn"
-
-
-def samle_filer(filer: list, **qwargs) -> gpd.GeoDataFrame:
-    return pd.concat((les_geopandas(fil, **qwargs) for fil in filer), axis=0, ignore_index=True)
+import geopandas as gpd
+import pandas as pd
 
 
 def eksisterer(sti):
@@ -38,6 +16,52 @@ def eksisterer(sti):
     except ModuleNotFoundError:
         from os.path import exists
         return exists(sti)
+
+
+def les_geopandas(sti: str) -> gpd.GeoDataFrame:
+    from dapla import FileClient
+    fs = FileClient.get_gcs_file_system()
+
+    if "parquet" in sti:
+        with fs.open(sti, mode='rb') as file:
+            return gpd.read_parquet(file)
+    else:
+        with fs.open(sti, mode='rb') as file:
+            return gpd.read_file(file)
+
+
+def skriv_geopandas(df: gpd.GeoDataFrame, gcs_path: str, schema=None, **kwargs) -> None:
+    from dapla import FileClient
+    from pyarrow import parquet
+
+    pd.io.parquet.BaseImpl.validate_dataframe(df)
+
+    from_pandas_kwargs = {"schema": kwargs.pop("schema", None)}
+    fs = FileClient.get_gcs_file_system()
+
+    if ".parquet" in gcs_path:
+        from geopandas.io.arrow import _encode_metadata, _geopandas_to_arrow
+        with fs.open(gcs_path, mode="wb") as buffer:
+            table = _geopandas_to_arrow(df, index=df.index, schema_version=None)
+            parquet.write_table(table, buffer, compression="snappy", **kwargs)
+    else:
+
+        from rasterio.io import MemoryFile
+        from gcsfs import GCSFileSystem
+        
+        if ".shp" in gcs_path:
+            driver = "ESRI Shapefile"
+        elif ".gpkg" in gcs_path:
+            driver = "GPKG"
+
+        with MemoryFile() as mem_dst:
+            df.to_file(mem_dst.name, driver=driver)
+            with fs.open(gcs_path, 'wb') as file:
+                file.write(mem_dst.read())
+
+
+def samle_filer(filer: list, **qwargs) -> gpd.GeoDataFrame:
+    return pd.concat((les_geopandas(fil, **qwargs) for fil in filer), axis=0, ignore_index=True)
     
     
 def lag_mappe(sti):
