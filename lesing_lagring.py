@@ -70,7 +70,6 @@ def lag_mappe(sti):
         makedirs(sti)
         
         
-        
 def read_invalid(sti, layer=None, **qwargs):
     """ Hvis fx en punktgeometri er kodet som LineString, klarer ikke geopandas å lese den. 
     Leser da 1000 rader av gangen, gjentar for problemradene fram til suksess. """
