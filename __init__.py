@@ -2,22 +2,20 @@
 
 import os
 os.environ['USE_PYGEOS'] = '0'
-import geopandas as gpd
-import pandas as pd
 
 
 # først noen kjappe tester av funksjonene og de underliggende GIS-algoritmene
 from geopandasgreier.testing.test import test_alt
 
+import pandas as pd
 pd.options.mode.chained_assignment = None # ignorerer midlertidig SettingWithCopyWarning
 
 try:
     test_alt()
 except Exception as e:
-    print("OBS: klarte ikke geopandasgreier-testene:")
-    print(e)
+    print(f"OBS: klarte ikke geopandasgreier-testene: {str(e)}")
     print("Sjekk geopandasgreier.testing.test for mer detaljer.")
-
+        
 pd.options.mode.chained_assignment = 'warn'
 
 del test_alt
