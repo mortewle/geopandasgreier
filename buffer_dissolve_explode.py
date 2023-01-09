@@ -73,6 +73,28 @@ def buffdissexp(gdf, avstand, resolution=50, by=None, id=None, copy=False, **dis
     id: navn på eventuell id-kolonne
     """
 
+    if copy:
+        gdf = gdf.copy()
+
+    gdf["geometry"] = gdf.buffer(avstand, resolution=resolution)
+    gdf["geometry"] = gdf.make_valid()
+    
+    dissolvet = (gdf
+                .loc[:, ~gdf.columns.str.contains("index|level_")]
+                .dissolve(by=by, **dissolve_qwargs)
+                .reset_index()
+    )
+
+    dissolvet["geometry"] = dissolvet.make_valid()
+
+    # gjør kolonner fra tuple til string (hvis flere by-kolonner)
+    dissolvet.columns = ["_".join(kolonne).strip("_") if isinstance(kolonne, tuple) else kolonne for kolonne in dissolvet.columns]
+
+    singlepart = dissolvet.explode(ignore_index=True)
+    
+    return singlepart
+
+"""
     if by:
         bufret = buff(gdf, avstand, resolution=resolution, copy=copy)
         dissolvet = diss(bufret, by=by, **dissolve_qwargs)
@@ -88,7 +110,7 @@ def buffdissexp(gdf, avstand, resolution=50, by=None, id=None, copy=False, **dis
         singlepart[id] = list(range(len(singlepart)))
 
     return singlepart
-
+"""
 
 def dissexp(gdf, by=None, id=None, **qwargs) -> gpd.GeoDataFrame:
     """
@@ -97,8 +119,8 @@ def dissexp(gdf, by=None, id=None, **qwargs) -> gpd.GeoDataFrame:
     resolution: buffer-oppløsning
     by: dissolve by
     id: navn på eventuell id-kolonne
-    """
 
+    """
     if by:
         dissolvet = diss(gdf, by, **qwargs)
         singlepart = dissolvet.explode(ignore_index=True)
@@ -185,4 +207,3 @@ def tett_hull(geom, max_km2=None, copy=False):
         geom = tett_med_shapely(geom, max_km2)
 
     return geom
-
